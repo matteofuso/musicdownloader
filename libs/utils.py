@@ -16,10 +16,12 @@ def parse(input: str):
         # Check if the service is youtube
         if domain in ["youtube.com", "youtu.be"]:
             return youtubeParse(path)
+        if domain == "spotify.com":
+            return spotifyParse(path)
         # If the service is not supported
         return {"type": "error", "value": "Not supported link"}
     # If the promt is a search query
-    return {"service": "youtube", "type": "search_query", "value": input}
+    return {"service": "spotify", "type": "search", "value": input}
 
 
 # Subfunction of parse, works only for youtube with the path of the link
@@ -38,7 +40,20 @@ def youtubeParse(path):
             for arg in args:
                 key, value = arg.split("=", 1)
                 # Check for valid arguments
-                if key in ["search_query", "v", "list"]:
+                if key in ["search_query", "v", "list"] and value != "":
                     return {"service": "youtube", "type": key, "value": value}
+                break
     # If no return yet, return an error
-    return {"service": "youtube", "type": "error", "value": "Invalid URL"}
+    return {"type": "error", "value": "Invalid URL"}
+
+
+# Subfunction of parse, works only for spotify with the path of the link
+def spotifyParse(path):
+    # Check for valid path
+    match = re.match(r"(track|playlist|album|show|search)\/([a-zA-Z0-9]+)", path)
+    if match:
+        # Return if valid
+        return {"service": "spotify", "type": match.group(1), "value": match.group(2)}
+    else:
+        # If no return yet, return an error
+        return {"type": "error", "value": "Invalid URL"}

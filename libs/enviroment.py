@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv, set_key
 
 dotenv_path = ".env"
-variables = ["spotifyAPI", "youtubeAPI"]
+variables = ["youtubeAPI"]
 
 
 def init():
