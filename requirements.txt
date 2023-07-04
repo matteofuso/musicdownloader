@@ -2,3 +2,5 @@ python-dotenv
 librespot
 mutagen
 pydub
+https://github.com/yt-dlp/yt-dlp/archive/master.tar.gz
+pillow

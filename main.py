@@ -1,6 +1,9 @@
 from libs import enviroment, utils, spotify, youtube
 from enum import Enum
 
+# Costants
+file_path = "./download"
+
 # Check if  the environment variable is set correctly
 enviroment.init()
 
@@ -20,7 +23,13 @@ download_functions = {
 
 # If the script is not running as a module
 if __name__ == "__main__":
-    request = utils.parse(
-        "https://open.spotify.com/track/1dV2NyQUs4fnjIt03nsObq?si=9889900b14e44103"
-    )
-    download_functions[Services[request["service"]]](request)
+    try:
+        while True:
+            request = utils.parse(input('Input the song to download or hit "CTRL + C" to exit: '))
+            if request["type"] != "error":
+                if not download_functions[Services[request["service"]]](request, file_path):
+                    print("Risorsa non esistente")
+            else:
+                print(request["value"])
+    except KeyboardInterrupt:
+        pass

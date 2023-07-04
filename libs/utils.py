@@ -1,5 +1,6 @@
+from mutagen.id3 import ID3, TIT2, TPE1, TALB, TDRC, TRCK, APIC, TPE2, TPOS
+import requests
 import re
-
 
 # Function to parse a promt to an array countaining the service, the type and the value of the request
 def parse(input: str):
@@ -57,3 +58,35 @@ def spotifyParse(path):
     else:
         # If no return yet, return an error
         return {"type": "error", "value": "Invalid URL"}
+
+# Function to add metadata to downloaded file
+def add_metadata(path, metadata):
+    # Open the file
+    file = ID3(path)
+    # Set title
+    file["TIT2"] = TIT2(encoding=3, text=metadata["title"])
+    # Set artists
+    file["TPE1"] = TPE1(encoding=3, text=metadata["artists"])
+    # Set artist
+    file["TPE2"] = TPE2(encoding=3, text=metadata["artist"])
+    # Set album
+    file["TALB"] = TALB(encoding=3, text=metadata["album"])
+    # Set year
+    file["TDRC"] = TDRC(encoding=3, text=metadata["year"])
+    # If the track number and disk number are not specified
+    if "number" in metadata:
+        # Set track number
+        file["TRCK"] = TRCK(encoding=3, text=str(metadata["number"]))
+        # Set the disc number
+        file["TPOS"] = TPOS(encoding=3, text=str(metadata["disc_number"]))
+    # Set image (album art)
+    image_data = requests.get(metadata["image"]).content
+    file["APIC"] = APIC(
+        encoding=3,
+        mime="image/jpeg",
+        type=3,
+        desc="0",
+        data=image_data,
+    )
+    # Save the modified file
+    file.save()

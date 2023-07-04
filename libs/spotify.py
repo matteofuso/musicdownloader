@@ -1,33 +1,36 @@
-from mutagen.id3 import ID3, TIT2, TPE1, TALB, TDRC, TRCK, APIC, TPE2
 from librespot.audio.decoders import AudioQuality, VorbisOnlyAudioQuality
 from librespot.metadata import TrackId
 from librespot.core import Session
+from libs import enviroment, utils
 from pydub import AudioSegment
 from dotenv import load_dotenv
 from getpass import getpass
-from libs import enviroment
 import datetime
 import requests
 import os
 
 # Costants
 buffer_size = 1024
-token_refresh_interval = 50 * 60  # 50 minutes
-file_path = "./download"
+token_refresh_interval = 60 * 60  # 1 Hour
+
+# Load .env variables
+load_dotenv(enviroment.dotenv_path)
 
 # Check or create a new session
+authenticated = True
 if os.path.isfile("credentials.json"):
-    SESSION = Session.Builder().stored_file().create()
-else:
-    authenticated = False
-    while not authenticated:
-        user_name = input("Username Spotify: ")
-        password = getpass("Password Spotify: ")
-        try:
-            SESSION = Session.Builder().user_pass(user_name, password).create()
-            authenticated = True
-        except:
-            pass
+    try:
+        SESSION = Session.Builder().stored_file().create()
+    except:
+        authenticated = False
+while not authenticated:
+    user_name = input("Username Spotify: ")
+    password = getpass("Password Spotify: ")
+    try:
+        SESSION = Session.Builder().user_pass(user_name, password).create()
+        authenticated = True
+    except:
+        pass
 
 
 # Set the quality
@@ -42,14 +45,16 @@ bitrate = ["96k", "160k", "320k"]
 
 # Function to get api key
 def get_token():
-    load_dotenv(enviroment.dotenv_path)
+    # Get the time when the API key was issued
     time = os.getenv("spotify_token_request")
+    # If the token is expired generate a new one
     if (
         time is None
         or int(datetime.datetime.now().timestamp())
         > float(time) + token_refresh_interval
     ):
         token = SESSION.tokens().get("user-read-email")
+        # Update the env variable
         enviroment.update("spotify_token", token)
         enviroment.update(
             "spotify_token_request", str(datetime.datetime.now().timestamp())
@@ -74,59 +79,45 @@ def track_metadata(id):
         "album": response["album"]["name"],
         "year": response["album"]["release_date"].split("-")[0],
         "number": response["track_number"],
-        "duration": response["duration_ms"],
         "image": response["album"]["images"][0]["url"],
-        "bitrate": bitrate[QUALITY.value],
+        "disc_number": response["disc_number"]
     }
 
 
 # Functions directly related to modifying the downloaded audio and its metadata
-def export(filename, metadata):
+def postprocess(filename, metadata):
+    # Export the audio from raw to playable format
     raw_audio = AudioSegment.from_file(
         filename, format="ogg", frame_rate=44100, channels=2, sample_width=2
     )
-    raw_audio.export(filename, format="mp3", bitrate=metadata["bitrate"])
-    audio = ID3(filename)
-    # Set title
-    audio["TIT2"] = TIT2(encoding=3, text=metadata["title"])
-    # Set artists
-    audio["TPE1"] = TPE1(encoding=3, text=metadata["artists"])
-    # Set artist
-    audio["TPE2"] = TPE2(encoding=3, text=metadata["artist"])
-    # Set album
-    audio["TALB"] = TALB(encoding=3, text=metadata["album"])
-    # Set year
-    audio["TDRC"] = TDRC(encoding=3, text=metadata["year"])
-    # Set track number
-    audio["TRCK"] = TRCK(encoding=3, text=str(metadata["number"]))
-    # Set image (album art)
-    image_data = requests.get(metadata["image"]).content
-    audio["APIC"] = APIC(
-        encoding=3,
-        mime="image/jpeg",
-        type=3,
-        desc="0",
-        data=image_data,
-    )
-    # Save the modified audio file
-    audio.save()
+    raw_audio.export(filename, format="mp3", bitrate=bitrate[QUALITY.value])
+    # Add metadata
+    utils.add_metadata(filename, metadata)
 
 
 # Download function
-def download(request):
+def download(request, file_path):
+    # If the request is about a track
     if request["type"] == "track":
-        track_id = TrackId.from_uri(f"spotify:track:{request['value']}")
+        # Get metadata
         metadata = track_metadata(request["value"])
-        stream = SESSION.content_feeder().load(
-            track_id, VorbisOnlyAudioQuality(QUALITY), False, None
-        )
+        # Prepare file path
         file = f"{file_path}/{metadata['title']} - {metadata['artist']}.mp3"
-        with open(file, "wb") as track:
-            for data in iter(
-                lambda: stream.input_stream.stream().read(buffer_size), b""
-            ):
-                track.write(data)
-        track.close()
-        export(file, metadata)
+        # If the file is already present
+        if not os.path.exists(file):
+            # Get the data stream
+            track_id = TrackId.from_uri(f"spotify:track:{request['value']}")
+            stream = SESSION.content_feeder().load(
+                track_id, VorbisOnlyAudioQuality(QUALITY), False, None
+            )
+            # Write the stream
+            with open(file, "wb") as track:
+                for data in iter(
+                    lambda: stream.input_stream.stream().read(buffer_size), b""
+                ):
+                    track.write(data)
+            track.close()
+            # Postprocess the raw file
+            postprocess(file, metadata)
         return True
     return False
