@@ -71,6 +71,8 @@ def track_metadata(id):
     }
     api = requests.get(f"https://api.spotify.com/v1/tracks/{id}", headers=headers)
     response = api.json()
+    if "error" in response:
+        return False
     artists_names = [artist["name"] for artist in response["artists"]]
     return {
         "title": response["name"],
@@ -80,7 +82,7 @@ def track_metadata(id):
         "year": response["album"]["release_date"].split("-")[0],
         "number": response["track_number"],
         "image": response["album"]["images"][0]["url"],
-        "disc_number": response["disc_number"]
+        "disc_number": response["disc_number"],
     }
 
 
@@ -101,10 +103,15 @@ def download(request, file_path):
     if request["type"] == "track":
         # Get metadata
         metadata = track_metadata(request["value"])
+        # If the resource does not exist
+        if not metadata:
+            return metadata
         # Prepare file path
         file = f"{file_path}/{metadata['title']} - {metadata['artist']}.mp3"
         # If the file is already present
-        if not os.path.exists(file):
+        if os.path.exists(file):
+            print("Song already exists, skipping...")
+        else:
             # Get the data stream
             track_id = TrackId.from_uri(f"spotify:track:{request['value']}")
             stream = SESSION.content_feeder().load(

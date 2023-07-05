@@ -26,6 +26,8 @@ def video_metadatadata(id):
         f'https://youtube.googleapis.com/youtube/v3/videos?part=snippet&id={id}&key={os.getenv("youtubeAPI")}'
     )
     response = api.json()
+    if len(response["items"]) == 0:
+        return False
     snippet = response["items"][0]["snippet"]
     description = snippet["description"]
     args = description.split("\n")
@@ -36,16 +38,18 @@ def video_metadatadata(id):
         file = args[2].split(" · ")
         autors_list = file[1:]
         title = file[0]
-        artist = ", ".join(autors_list)
+        artists = ", ".join(autors_list)
         artist = autors_list[0]
         album = args[4]
         year = args[8].removeprefix("Released on: ").split("-")[0]
+        filename = f"{title} - {artist}"
     else:
         title = snippet["title"]
         artist = snippet["channelTitle"]
         artists = artist
         album = title
         year = snippet["publishedAt"].split("-")[0]
+        filename = title
     return {
         "title": title,
         "artist": artist,
@@ -53,8 +57,10 @@ def video_metadatadata(id):
         "album": album,
         "year": year,
         "image": f"https://i.ytimg.com/vi/{id}/maxresdefault.jpg",
-        "music": music
+        "music": music,
+        "filename": filename,
     }
+
 
 # Download function
 def download(request, file_path):
@@ -62,10 +68,15 @@ def download(request, file_path):
     if request["type"] == "v":
         # Get metadata
         metadata = video_metadatadata(request["value"])
+        # Check if the resource exists
+        if not metadata:
+            return metadata
         # Prepare file path
-        filename = f"{file_path}/{metadata['title']} - {metadata['artist']}"
+        filename = f"{file_path}/{metadata['filename']}"
         # If the file already exists
-        if not os.path.exists(filename + ".mp3"):
+        if os.path.exists(filename + ".mp3"):
+            print("Video already exists, skipping...")
+        else:
             # Download the video
             with yt_dlp.YoutubeDL({**download_option, "outtmpl": filename}) as ydl:
                 ydl.download(f"https://www.youtube.com/watch?v={request['value']}")

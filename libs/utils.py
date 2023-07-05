@@ -1,16 +1,19 @@
 from mutagen.id3 import ID3, TIT2, TPE1, TALB, TDRC, TRCK, APIC, TPE2, TPOS
+from io import BytesIO
+from PIL import Image
 import requests
 import re
 
+
 # Function to parse a promt to an array countaining the service, the type and the value of the request
 def parse(input: str):
-    match = re.match(r"(http[s]?://)?([a-zA-Z.]+)(/(.*)?)?", input)
+    match = re.match(r"(http[s]?://)?([a-zA-Z.]+)/(.*)?", input)
     # Check if the input is a link
     if match:
         URLparts = match.group(2).split(".")
         # Obtain the URL parts
         domain = ".".join(URLparts[-2:])
-        path = match.group(4)
+        path = match.group(3)
         # If the path is empty
         if path is None:
             return {"type": "error", "value": "A complete link must be given"}
@@ -59,6 +62,7 @@ def spotifyParse(path):
         # If no return yet, return an error
         return {"type": "error", "value": "Invalid URL"}
 
+
 # Function to add metadata to downloaded file
 def add_metadata(path, metadata):
     # Open the file
@@ -73,14 +77,29 @@ def add_metadata(path, metadata):
     file["TALB"] = TALB(encoding=3, text=metadata["album"])
     # Set year
     file["TDRC"] = TDRC(encoding=3, text=metadata["year"])
+    # Download the image
+    image_data = requests.get(metadata["image"]).content
     # If the track number and disk number are not specified
     if "number" in metadata:
         # Set track number
         file["TRCK"] = TRCK(encoding=3, text=str(metadata["number"]))
         # Set the disc number
         file["TPOS"] = TPOS(encoding=3, text=str(metadata["disc_number"]))
-    # Set image (album art)
-    image_data = requests.get(metadata["image"]).content
+        # Set image (album art)
+    # If it is from youtube music
+    if "music" in metadata and metadata["music"]:
+        # Open the image
+        image = Image.open(BytesIO(image_data))
+        # Crop the image
+        width, height = image.size
+        top_left = int((width - height) / 2)
+        box = (top_left, 0, width - top_left, height)
+        cropped_image = image.crop(box)
+        # Save the image
+        cropped_image_buffer = BytesIO()
+        cropped_image.save(cropped_image_buffer, format="JPEG")
+        image_data = cropped_image_buffer.getvalue()
+    # Set the image
     file["APIC"] = APIC(
         encoding=3,
         mime="image/jpeg",
