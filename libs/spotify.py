@@ -30,7 +30,7 @@ while not authenticated:
         SESSION = Session.Builder().user_pass(user_name, password).create()
         authenticated = True
     except:
-        pass
+        continue
 
 
 # Set the quality
@@ -64,26 +64,46 @@ def get_token():
 
 
 # Function to get song metadata
-def track_metadata(id):
+def format_metadata(raw, basic=False):
+    if "error" in raw:
+        return False
+    artists_names = [artist["name"] for artist in raw["artists"]]
+    if basic:
+        return {
+            "title": raw["name"],
+            "artists": ", ".join(artists_names),
+        }
+    return {
+        "title": raw["name"],
+        "artist": raw["artists"][0]["name"],
+        "artists": ", ".join(artists_names),
+        "album": raw["album"]["name"],
+        "year": raw["album"]["release_date"].split("-")[0],
+        "number": raw["track_number"],
+        "image": raw["album"]["images"][0]["url"],
+        "disc_number": raw["disc_number"],
+    }
+
+
+# Function to search for a song and download
+def search(name):
     headers = {
         "Authorization": f"Bearer {get_token()}",
         "Content-Type": "application/json",
     }
-    api = requests.get(f"https://api.spotify.com/v1/tracks/{id}", headers=headers)
+    url = f"https://api.spotify.com/v1/search?q={name.replace(' ', '+')}&type=track&limit=10"
+    api = requests.get(url, headers=headers)
     response = api.json()
-    if "error" in response:
-        return False
-    artists_names = [artist["name"] for artist in response["artists"]]
-    return {
-        "title": response["name"],
-        "artist": response["artists"][0]["name"],
-        "artists": ", ".join(artists_names),
-        "album": response["album"]["name"],
-        "year": response["album"]["release_date"].split("-")[0],
-        "number": response["track_number"],
-        "image": response["album"]["images"][0]["url"],
-        "disc_number": response["disc_number"],
-    }
+    if len(response["tracks"]["items"]) != 0:
+        print("\nHere a list of suitable tracks:")
+        for i, item in enumerate(response["tracks"]["items"], 1):
+            metadata = format_metadata(item, True)
+            print(f"{i}. {metadata['title']} - {metadata['artists']}")
+        i = int(input("Select the song: ")) - 1
+        while i < 0 or i >= len(response["tracks"]["items"]):
+            i = int(input("Select a valid index: ")) - 1
+        return response["tracks"]["items"][i]
+    return False
 
 
 # Functions directly related to modifying the downloaded audio and its metadata
@@ -102,29 +122,47 @@ def download(request, file_path):
     # If the request is about a track
     if request["type"] == "track":
         # Get metadata
-        metadata = track_metadata(request["value"])
+        headers = {
+            "Authorization": f"Bearer {get_token()}",
+            "Content-Type": "application/json",
+        }
+        api = requests.get(f"https://api.spotify.com/v1/tracks/{id}", headers=headers)
+        metadata = format_metadata(api.json())
         # If the resource does not exist
         if not metadata:
             return metadata
-        # Prepare file path
-        file = f"{file_path}/{metadata['title']} - {metadata['artist']}.mp3"
-        # If the file is already present
-        if os.path.exists(file):
-            print("Song already exists, skipping...")
-        else:
-            # Get the data stream
-            track_id = TrackId.from_uri(f"spotify:track:{request['value']}")
-            stream = SESSION.content_feeder().load(
-                track_id, VorbisOnlyAudioQuality(QUALITY), False, None
-            )
-            # Write the stream
-            with open(file, "wb") as track:
-                for data in iter(
-                    lambda: stream.input_stream.stream().read(buffer_size), b""
-                ):
-                    track.write(data)
-            track.close()
-            # Postprocess the raw file
-            postprocess(file, metadata)
+        # Download the track
+        download_track(request["value"], metadata, file_path)
         return True
+    # If the request is about a search request
+    if request["type"] == "search":
+        raw = search(request["value"])
+        # If no match
+        if raw:
+            download_track(raw["id"], format_metadata(raw), file_path)
+            return True
     return False
+
+
+# Function to downloa a track
+def download_track(id, metadata, file_path):
+    # Get the data stream
+    track_id = TrackId.from_uri(f"spotify:track:{id}")
+    stream = SESSION.content_feeder().load(
+        track_id, VorbisOnlyAudioQuality(QUALITY), False, None
+    )
+    # Prepare file path
+    file = f"{file_path}/{metadata['title']} - {metadata['artist']}.mp3"
+    # If the file is already present
+    if os.path.exists(file):
+        print("Song already exists, skipping...\n")
+        return
+    # Write the stream
+    with open(file, "wb") as track:
+        print("Downloading...")
+        for data in iter(lambda: stream.input_stream.stream().read(buffer_size), b""):
+            track.write(data)
+        track.close()
+        # Postprocess the raw file
+        postprocess(file, metadata)
+        print("Downloaded successfully!\n")
