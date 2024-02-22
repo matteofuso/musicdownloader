@@ -42,14 +42,13 @@ def video_metadatadata(id):
         artist = autors_list[0]
         album = args[4]
         year = args[8].removeprefix("Released on: ").split("-")[0]
-        filename = f"{title} - {artist}"
     else:
         title = snippet["title"]
         artist = snippet["channelTitle"]
         artists = artist
         album = title
         year = snippet["publishedAt"].split("-")[0]
-        filename = title
+    filename = title
     return {
         "title": title,
         "artist": artist,
@@ -72,7 +71,8 @@ def download(request, file_path):
         if not metadata:
             return metadata
         # Prepare file path
-        filename = f"{file_path}/{metadata['filename']}"
+        filename = f"{metadata['filename']}"
+        filename = f"{file_path}/{utils.sanitize_file_name(filename)}"
         # If the file already exists
         if os.path.exists(filename + ".mp3"):
             print("Video already exists, skipping...")

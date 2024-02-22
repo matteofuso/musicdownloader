@@ -16,9 +16,9 @@ def init():
     if not os.path.exists(dotenv_path):
         open(dotenv_path, "w").close()
     load_dotenv(dotenv_path)
-    for variable in variables:
+    for i, variable in enumerate(variables):
         if os.getenv(variable) is None:
-            if variable == variables[0]:
+            if i == 0:
                 while True:
                     value = input("Youtube API key is not defined, please provide one: ")
                     if check_youtube_api_key(value):
@@ -32,3 +32,4 @@ def init():
 # Function to update env variables
 def update(key: str, value: str):
     set_key(dotenv_path, key, value)
+    load_dotenv(dotenv_path)

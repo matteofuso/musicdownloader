@@ -35,6 +35,7 @@ if __name__ == "__main__":
                 input('Input the song to download or hit "CTRL + C" to exit: ')
             )
             if request["type"] != "error":
+                print(request)
                 if not download_functions[Services[request["service"]]](
                     request, file_path
                 ):

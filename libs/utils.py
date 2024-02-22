@@ -54,7 +54,12 @@ def youtubeParse(path):
 # Subfunction of parse, works only for spotify with the path of the link
 def spotifyParse(path):
     # Check for valid path
+    # https://open.spotify.com/intl-it/track/23RoR84KodL5HWvUTneQ1w?si=da5e578e6e574179
+    if path.startswith("intl-"):
+        path = path[8:]
+    print(path)
     match = re.match(r"(track|playlist|album|show|search)\/([a-zA-Z0-9]+)", path)
+    print(match)
     if match:
         # Return if valid
         return {"service": "spotify", "type": match.group(1), "value": match.group(2)}
@@ -109,3 +114,7 @@ def add_metadata(path, metadata):
     )
     # Save the modified file
     file.save()
+
+
+def sanitize_file_name(file_name:str):
+    return file_name.replace("/", "").replace("\\", "").replace(":", "").replace("*", "").replace("?", "").replace("<", "").replace(">", "").replace("|", "")

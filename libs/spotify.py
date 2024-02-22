@@ -7,28 +7,38 @@ from dotenv import load_dotenv
 from getpass import getpass
 import datetime
 import requests
+import time
 import os
+import re
+import json
 
 # Costants
 buffer_size = 1024
 token_refresh_interval = 60 * 60  # 1 Hour
+timeout = 10 # Minimun time to wait between two songs to be downloaded (to avoid ban)
+
+# Gloval variables
+last_download = datetime.datetime.now().timestamp()
+SESSION = None
+QUALITY = None
 
 # Load .env variables
 load_dotenv(enviroment.dotenv_path)
 
 # Check or create a new session
-authenticated = True
+authenticated = False
 if os.path.isfile("credentials.json"):
     try:
         SESSION = Session.Builder().stored_file().create()
+        authenticated = True
     except:
         authenticated = False
 while not authenticated:
     user_name = input("Username Spotify: ")
-    password = getpass("Password Spotify: ")
+    password = input("Password Spotify: ")
     try:
         SESSION = Session.Builder().user_pass(user_name, password).create()
-        authenticated = True
+        break
     except:
         continue
 
@@ -59,7 +69,6 @@ def get_token():
         enviroment.update(
             "spotify_token_request", str(datetime.datetime.now().timestamp())
         )
-        load_dotenv(enviroment.dotenv_path)
     return os.getenv("spotify_token")
 
 
@@ -68,13 +77,15 @@ def format_metadata(raw, basic=False):
     if "error" in raw:
         return False
     artists_names = [artist["name"] for artist in raw["artists"]]
+    title = re.sub(r'\(feat\..*?\)', '', raw["name"])
+    title = re.sub(r'\(con.*?\)', '', title).rstrip()
     if basic:
         return {
-            "title": raw["name"],
+            "title": title,
             "artists": ", ".join(artists_names),
         }
     return {
-        "title": raw["name"],
+        "title": title,
         "artist": raw["artists"][0]["name"],
         "artists": ", ".join(artists_names),
         "album": raw["album"]["name"],
@@ -94,15 +105,23 @@ def search(name):
     url = f"https://api.spotify.com/v1/search?q={name.replace(' ', '+')}&type=track&limit=10"
     api = requests.get(url, headers=headers)
     response = api.json()
-    if len(response["tracks"]["items"]) != 0:
+    if "tracks" in response:
         print("\nHere a list of suitable tracks:")
         for i, item in enumerate(response["tracks"]["items"], 1):
             metadata = format_metadata(item, True)
             print(f"{i}. {metadata['title']} - {metadata['artists']}")
-        i = int(input("Select the song: ")) - 1
-        while i < 0 or i >= len(response["tracks"]["items"]):
-            i = int(input("Select a valid index: ")) - 1
-        return response["tracks"]["items"][i]
+        while True:
+            i = input("Select the song (or write exit): ")
+            try:
+                i = int(i) - 1
+            except:
+                if i == "exit":
+                    return False
+                else:
+                    continue
+            else:
+                if i >= 0 and i < len(response["tracks"]["items"]):
+                    return response["tracks"]["items"][i]
     return False
 
 
@@ -126,7 +145,8 @@ def download(request, file_path):
             "Authorization": f"Bearer {get_token()}",
             "Content-Type": "application/json",
         }
-        api = requests.get(f"https://api.spotify.com/v1/tracks/{id}", headers=headers)
+        api = requests.get(f"https://api.spotify.com/v1/tracks/{request['value']}", headers=headers)
+        # Response to file
         metadata = format_metadata(api.json())
         # If the resource does not exist
         if not metadata:
@@ -146,23 +166,29 @@ def download(request, file_path):
 
 # Function to downloa a track
 def download_track(id, metadata, file_path):
+    global last_download
     # Get the data stream
     track_id = TrackId.from_uri(f"spotify:track:{id}")
     stream = SESSION.content_feeder().load(
         track_id, VorbisOnlyAudioQuality(QUALITY), False, None
     )
     # Prepare file path
-    file = f"{file_path}/{metadata['title']} - {metadata['artist']}.mp3"
+    file = f"{metadata['title']}.mp3"
+    file = f"{file_path}/{utils.sanitize_file_name(file)}"
     # If the file is already present
     if os.path.exists(file):
         print("Song already exists, skipping...\n")
         return
+    while datetime.datetime.now().timestamp() - last_download < timeout:
+        print(datetime.datetime.now().timestamp() - last_download)
+        time.sleep(1)
     # Write the stream
     with open(file, "wb") as track:
         print("Downloading...")
         for data in iter(lambda: stream.input_stream.stream().read(buffer_size), b""):
             track.write(data)
         track.close()
+        last_download = datetime.datetime.now().timestamp()
         # Postprocess the raw file
         postprocess(file, metadata)
         print("Downloaded successfully!\n")
