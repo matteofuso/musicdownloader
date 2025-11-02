@@ -18,11 +18,18 @@ class Helpers():
     
     @staticmethod
     def set_env_variable(var_name: str, value: str) -> None:
+        var_name = str(var_name)
+        value = str(value)
         os.environ[var_name] = value
         if not os.path.exists(Helpers.__DOTENV):
             with open(Helpers.__DOTENV, 'w'):
                 pass
         set_key(Helpers.__DOTENV, var_name, value)
+    
+    @staticmethod
+    def set_env_variables_dict(variables: dict[str, str], prefix: str) -> None:
+        for var_name, value in variables.items():
+            Helpers.set_env_variable(prefix + "_" + var_name, value)
 
     @staticmethod
     def exist_env_variable(var_name: str) -> bool:

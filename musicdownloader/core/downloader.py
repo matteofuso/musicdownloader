@@ -18,12 +18,13 @@ class Downloader:
         self.download_resource(path, self.uri, self.resource_type)
 
     @staticmethod
-    def download_resource(path: str, uri: str, resource_type: DownlaodResource) -> None:
-        pass
-
-    @staticmethod
     def isLoggedIn() -> bool:
         return True
-    
-    def login(self) -> None:
-        pass
+
+    @staticmethod
+    def login(**kwargs: str | None) -> dict[str, str]:
+        return {}
+
+    @staticmethod
+    def download_resource(path: str, uri: str, resource_type: DownlaodResource) -> None:
+        raise NotImplementedError()

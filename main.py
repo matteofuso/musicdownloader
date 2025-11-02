@@ -41,14 +41,18 @@ def settings_menu():
 def download_menu():
     value: str
     userContinue: bool
-    downloader: Downloader
     download_dir: str | None
+    sessions_dict: dict[str, str]
     path: str
+    excecp: bool
+    prefix: str
     
     userContinue = True
+    excecp = False
     
     try:
         while userContinue:
+            downloader: Downloader
             value = input("Enter the URL of the music to download (or press Enter to go back): ").strip()
             if value.lower() == "":
                 userContinue = False
@@ -60,19 +64,34 @@ def download_menu():
                 else:
                     if not downloader.isLoggedIn():
                         print("You are not logged in. Please log in to continue.")
-                        downloader.login()
-                    download_dir = Helpers.get_env_variable("DOWNLOAD_DIRECTORY")
-                    if download_dir is None:
-                        path = Helpers.input_with_validation("Enter the download directory path: ", Helpers.is_folder_creatable)
-                        Helpers.set_env_variable("DOWNLOAD_DIRECTORY", path)
-                    else:
-                        path = download_dir
-                    try:
-                        downloader.download(path)
-                        print("Download completed successfully.")
-                    except DownloadException as e:
-                        print(f"Download failed: {e}")
-                    print()
+                        try:
+                            match downloader.__class__.__name__:
+                                case "SpotifyDownloader":
+                                    sessions_dict = downloader.login(
+                                        username=Helpers.get_env_variable("spotify_username"),
+                                        credentials=Helpers.get_env_variable("spotify_credentials"),
+                                        typ=Helpers.get_env_variable("spotify_type"),
+                                    )
+                                    prefix = "spotify"
+                                case _:
+                                    sessions_dict = {}
+                                    prefix = ""
+                            Helpers.set_env_variables_dict(sessions_dict, prefix)
+                        except DownloadException as e:
+                            print(f"Login failed: {e}")
+                    if not excecp:
+                        download_dir = Helpers.get_env_variable("DOWNLOAD_DIRECTORY")
+                        if download_dir is None:
+                            path = Helpers.input_with_validation("Enter the download directory path: ", Helpers.is_folder_creatable)
+                            Helpers.set_env_variable("DOWNLOAD_DIRECTORY", path)
+                        else:
+                            path = download_dir
+                        try:
+                            downloader.download(path)
+                            print("Download completed successfully.")
+                        except DownloadException as e:
+                            print(f"Download failed: {e}")
+                print()
 
     except KeyboardInterrupt:
         pass
