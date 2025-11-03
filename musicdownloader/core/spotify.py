@@ -1,6 +1,7 @@
 # type: ignore
 from musicdownloader.core.downloader import Downloader, DownlaodResource, DownloadException
 from musicdownloader.core.metadata import Metadata as FMetadata
+from musicdownloader.core.ffmpeg import FFMPEG
 from librespot.core import Session
 from librespot.proto import Authentication_pb2 as Authentication
 from librespot.metadata import TrackId, AlbumId, PlaylistId
@@ -8,6 +9,7 @@ from librespot.proto import Metadata_pb2 as Metadata
 from librespot.audio.decoders import AudioQuality, VorbisOnlyAudioQuality
 from base64 import b64encode, b64decode
 import webbrowser
+import os
 
 class SpotifyResource(DownlaodResource):
     TRACK = "track"
@@ -16,6 +18,11 @@ class SpotifyResource(DownlaodResource):
 
 class SpotifyDownloader(Downloader):
     __session: Session | None = None
+    __bitrate_map = {
+        AudioQuality.VERY_HIGH: "320k",
+        AudioQuality.HIGH: "160k",
+        AudioQuality.NORMAL: "96k",
+    }
 
     @staticmethod
     def login(username: str | None, credentials: str | None, typ: str | None) -> dict[str, str]:
@@ -79,7 +86,7 @@ class SpotifyDownloader(Downloader):
             release_year=protobuf.album.date.year or None,
             disk_number=protobuf.disc_number or None,
             track_number=protobuf.number or None,
-            external_id=isrc,
+            isrc=isrc,
             cover_url="https://i.scdn.co/image/" + max(protobuf.album.cover_group.image, key=lambda x: x.width).file_id.hex()
         )
 
@@ -107,5 +114,31 @@ class SpotifyDownloader(Downloader):
         else:
             quality = AudioQuality.NORMAL
 
-        print(metadata.__dict__)
-        print(f"Selected quality: {quality.name}")
+        filename = f"{metadata.title} - {metadata.album_artists[0]}"
+        filename = Downloader._validate_filename(filename)
+        extension = "ogg" if quality != AudioQuality.LOSSLESS else "flac"
+        try:
+            stream = SpotifyDownloader.__session.content_feeder().load(track_id, VorbisOnlyAudioQuality(quality), False, None)
+            with open(f"{path}/{filename}.{extension}", "wb") as f:
+                while True:
+                    chunk = stream.input_stream.stream().read(4096)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+        except Exception:
+            raise DownloadException("Failed to download track audio")
+        if quality != AudioQuality.LOSSLESS:
+            if not FFMPEG.is_initialized():
+                raise DownloadException("FFMPEG is not initialized. Cannot convert audio to mp3.")
+            try:
+                FFMPEG.execute_command(['-i', f"{path}/{filename}.{extension}", '-b:a', SpotifyDownloader.__bitrate_map[quality], f"{path}/{filename}.mp3", '-y'])
+                os.remove(f"{path}/{filename}.{extension}")
+                extension = "mp3"
+            except Exception as e:
+                print(e)
+                raise DownloadException("Failed to convert track audio to mp3")
+        try:
+            metadata.attach(f"{path}/{filename}.{extension}")
+        except Exception as e:
+            print(e)
+            raise DownloadException("Failed to attach metadata to track audio")

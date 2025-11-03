@@ -1,4 +1,5 @@
 from musicdownloader.helpers import Helpers
+from musicdownloader.core.ffmpeg import FFMPEG
 from musicdownloader.core.downloader import Downloader, DownloadException
 
 def settings_menu():
@@ -76,6 +77,7 @@ def download_menu():
                                 case _:
                                     sessions_dict = {}
                                     prefix = ""
+                            print("Login successful.")
                             Helpers.set_env_variables_dict(sessions_dict, prefix)
                         except DownloadException as e:
                             print(f"Login failed: {e}")
@@ -100,6 +102,7 @@ def main():
     value: int
     userContinue: bool
     options: list[str]
+    ffmpeg_binary: str
     
     userContinue = True
     options = [
@@ -108,6 +111,11 @@ def main():
     ]
     
     Helpers.load_environment()
+    try:
+        ffmpeg_binary = FFMPEG.init(Helpers.get_env_variable("FFMPEG_BINARY"))
+        Helpers.set_env_variable("FFMPEG_BINARY", ffmpeg_binary)
+    except Exception as e:
+        print(f"Warning: FFMPEG initialization failed: {e}")
     try:
         while userContinue:
             value = Helpers.menu(options, "Main Menu")

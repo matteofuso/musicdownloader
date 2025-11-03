@@ -1,4 +1,5 @@
 .musicdownloader
 .env
 __pycache__
+ffmpeg
 downloads

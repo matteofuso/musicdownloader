@@ -26,5 +26,12 @@ class Downloader:
         return {}
 
     @staticmethod
+    def _validate_filename(filename: str) -> str:
+        invalid_chars = '<>:"/\\|?*\0.'
+        for char in invalid_chars:
+            filename = filename.replace(char, '_')
+        return filename.strip()
+
+    @staticmethod
     def download_resource(path: str, uri: str, resource_type: DownlaodResource) -> None:
         raise NotImplementedError()
