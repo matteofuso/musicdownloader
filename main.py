@@ -1,6 +1,8 @@
 from musicdownloader.helpers import Helpers
 from musicdownloader.core.ffmpeg import FFMPEG
 from musicdownloader.core.downloader import Downloader, DownloadException
+from musicdownloader.core.progress import ProgressHandler
+from musicdownloader.core.metadata import Metadata
 
 def settings_menu():
     value: int
@@ -38,6 +40,18 @@ def settings_menu():
                     userContinue = False
     except KeyboardInterrupt:
         pass
+
+def generate_progress_handler() -> ProgressHandler:
+    progress: ProgressHandler
+
+    progress = ProgressHandler()
+    progress.add_task("download", "  └─ Downloading ...")
+    progress.add_task("convert", "  └─ Converting ...")
+    progress.add_task("metadata", "  └─ Attaching Metadata ...")
+    return progress
+
+def print_title(metadata: Metadata) -> None:
+    print(f"Downloading: {metadata.title} by {', '.join(metadata.artists) if metadata.artists else 'Unknown Artist'}: ")
 
 def download_menu():
     value: str
@@ -89,8 +103,10 @@ def download_menu():
                         else:
                             path = download_dir
                         try:
-                            downloader.download(path)
-                            print("Download completed successfully.")
+                            if not downloader.download(path, print_title, generate_progress_handler()):
+                                print("The track was already downloaded. Skipping download.")
+                            else:
+                                print("Download completed successfully.")
                         except DownloadException as e:
                             print(f"Download failed: {e}")
                 print()

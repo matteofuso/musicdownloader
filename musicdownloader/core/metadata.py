@@ -18,7 +18,7 @@ class Metadata:
     release_year: int | None
     disk_number: int | None
     track_number: int | None
-    isrc: str | None  # Changed from external_id to isrc for clarity
+    isrc: str | None
     cover_url: str | None
 
     def __init__(

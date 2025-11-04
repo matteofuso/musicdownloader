@@ -2,11 +2,13 @@
 from musicdownloader.core.downloader import Downloader, DownlaodResource, DownloadException
 from musicdownloader.core.metadata import Metadata as FMetadata
 from musicdownloader.core.ffmpeg import FFMPEG
+from musicdownloader.core.progress import ProgressHandler
 from librespot.core import Session
 from librespot.proto import Authentication_pb2 as Authentication
 from librespot.metadata import TrackId, AlbumId, PlaylistId
 from librespot.proto import Metadata_pb2 as Metadata
 from librespot.audio.decoders import AudioQuality, VorbisOnlyAudioQuality
+from collections.abc import Callable
 from base64 import b64encode, b64decode
 import webbrowser
 import os
@@ -58,12 +60,12 @@ class SpotifyDownloader(Downloader):
         return SpotifyDownloader.__session.is_valid()
 
     @staticmethod
-    def download_resource(path: str, uri: str, resource_type: DownlaodResource) -> None:
+    def download_resource(path: str, uri: str, resource_type: DownlaodResource, print_title: Callable[[Metadata], None] | None = None, progress: ProgressHandler | None = None) -> None:
         if type(resource_type) is not SpotifyResource:
             raise DownloadException("Invalid resource type for SpotifyDownloader")
         match resource_type:
             case SpotifyResource.TRACK:
-                SpotifyDownloader.download_track(path, uri)
+                SpotifyDownloader.download_track(path, uri, print_title, progress)
             case SpotifyResource.ALBUM:
                 pass
             case SpotifyResource.PLAYLIST:
@@ -91,14 +93,17 @@ class SpotifyDownloader(Downloader):
         )
 
     @staticmethod
-    def download_track(path: str, uri: str) -> None:
+    def download_track(path: str, uri: str, print_title: Callable[[Metadata], None] | None = None, progress: ProgressHandler | None = None) -> bool:
         if not SpotifyDownloader.isLoggedIn():
             raise DownloadException("Not logged in to Spotify")
+        if progress is None:
+            progress = ProgressHandler()
 
         try:
             track_id = TrackId.from_uri("spotify:track:" + uri)
             metadata_protobuf = SpotifyDownloader.__session.api().get_metadata_4_track(track_id)
         except Exception as e:
+            progress.stop()
             raise DownloadException("Failed to fetch track metadata")
         metadata = SpotifyDownloader.__parse_track_metadata(metadata_protobuf)
         formats = [f.format for f in metadata_protobuf.file]
@@ -114,31 +119,59 @@ class SpotifyDownloader(Downloader):
         else:
             quality = AudioQuality.NORMAL
 
+        # Download audio stream
+        if print_title is not None:
+            print_title(metadata)
         filename = f"{metadata.title} - {metadata.album_artists[0]}"
         filename = Downloader._validate_filename(filename)
+        # Check if track is already downloaded
+        if os.path.isfile(f"{path}/{filename}.mp3") or os.path.isfile(f"{path}/{filename}.flac") or os.path.isfile(f"{path}/{filename}.ogg"):
+            progress.stop()
+            return True
+        
         extension = "ogg" if quality != AudioQuality.LOSSLESS else "flac"
         try:
             stream = SpotifyDownloader.__session.content_feeder().load(track_id, VorbisOnlyAudioQuality(quality), False, None)
+            if progress.has_task("download"):
+                progress.update_task("download", total=stream.input_stream.stream().decoded_length(), visible=True)
             with open(f"{path}/{filename}.{extension}", "wb") as f:
                 while True:
                     chunk = stream.input_stream.stream().read(4096)
                     if not chunk:
                         break
                     f.write(chunk)
+                    if progress.has_task("download"):
+                        progress.update_task("download", advance=len(chunk))
         except Exception:
+            progress.stop()
             raise DownloadException("Failed to download track audio")
+        
+        # Post-process: convert to mp3 if needed and attach metadata
         if quality != AudioQuality.LOSSLESS:
             if not FFMPEG.is_initialized():
                 raise DownloadException("FFMPEG is not initialized. Cannot convert audio to mp3.")
             try:
+                if progress.has_task("convert"):
+                    progress.update_task("convert", total=1, visible=True)
                 FFMPEG.execute_command(['-i', f"{path}/{filename}.{extension}", '-b:a', SpotifyDownloader.__bitrate_map[quality], f"{path}/{filename}.mp3", '-y'])
                 os.remove(f"{path}/{filename}.{extension}")
                 extension = "mp3"
-            except Exception as e:
-                print(e)
+                if progress.has_task("convert"):
+                    progress.update_task("convert", advance=1)
+            except Exception:
+                progress.stop()
                 raise DownloadException("Failed to convert track audio to mp3")
+        
+        # Attach metadata
         try:
+            if progress.has_task("metadata"):
+                progress.update_task("metadata", total=1, visible=True)
             metadata.attach(f"{path}/{filename}.{extension}")
-        except Exception as e:
-            print(e)
+            if progress.has_task("metadata"):
+                progress.update_task("metadata", advance=1)
+        except Exception:
+            progress.stop()
             raise DownloadException("Failed to attach metadata to track audio")
+        
+        progress.stop()
+        return False
