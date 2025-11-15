@@ -56,7 +56,6 @@ def print_title(metadata: Metadata) -> None:
 def download_menu():
     value: str
     userContinue: bool
-    download_dir: str | None
     sessions_dict: dict[str, str]
     path: str
     excecp: bool
@@ -96,14 +95,9 @@ def download_menu():
                         except DownloadException as e:
                             print(f"Login failed: {e}")
                     if not excecp:
-                        download_dir = Helpers.get_env_variable("DOWNLOAD_DIRECTORY")
-                        if download_dir is None:
-                            path = Helpers.input_with_validation("Enter the download directory path: ", Helpers.is_folder_creatable)
-                            Helpers.set_env_variable("DOWNLOAD_DIRECTORY", path)
-                        else:
-                            path = download_dir
+                        path = Helpers.get_env_variable("DOWNLOAD_DIRECTORY") or ""
                         try:
-                            if not downloader.download(path, print_title, generate_progress_handler()):
+                            if downloader.download(path, print_title, generate_progress_handler()):
                                 print("The track was already downloaded. Skipping download.")
                             else:
                                 print("Download completed successfully.")
@@ -119,6 +113,7 @@ def main():
     userContinue: bool
     options: list[str]
     ffmpeg_binary: str
+    download_dir: str | None
     
     userContinue = True
     options = [
@@ -132,6 +127,10 @@ def main():
         Helpers.set_env_variable("FFMPEG_BINARY", ffmpeg_binary)
     except Exception as e:
         print(f"Warning: FFMPEG initialization failed: {e}")
+    download_dir = Helpers.get_env_variable("DOWNLOAD_DIRECTORY")
+    if download_dir is None:
+        path = Helpers.input_with_validation("Enter the download directory path: ", Helpers.is_folder_creatable)
+        Helpers.set_env_variable("DOWNLOAD_DIRECTORY", path)
     try:
         while userContinue:
             value = Helpers.menu(options, "Main Menu")

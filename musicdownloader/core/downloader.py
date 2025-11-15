@@ -17,8 +17,8 @@ class Downloader:
         self.resource_type = resource_type
         self.uri = uri
 
-    def download(self, path: str, print_title: Callable[[Metadata], None] | None = None,  progress: ProgressHandler | None = None) -> None:
-        self.download_resource(path, self.uri, self.resource_type, print_title, progress)
+    def download(self, path: str, print_title: Callable[[Metadata], None] | None = None,  progress: ProgressHandler | None = None) -> bool:
+        return self.download_resource(path, self.uri, self.resource_type, print_title, progress)
 
     @staticmethod
     def isLoggedIn() -> bool:
@@ -36,5 +36,5 @@ class Downloader:
         return filename.strip()
 
     @staticmethod
-    def download_resource(path: str, uri: str, resource_type: DownlaodResource, print_title: Callable[[Metadata], None] | None = None,  progress: ProgressHandler | None = None) -> None:
+    def download_resource(path: str, uri: str, resource_type: DownlaodResource, print_title: Callable[[Metadata], None] | None = None,  progress: ProgressHandler | None = None) -> bool:
         raise NotImplementedError()

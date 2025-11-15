@@ -43,7 +43,8 @@ class SpotifyDownloader(Downloader):
                 pass
         if SpotifyDownloader.__session is None or not SpotifyDownloader.__session.is_valid():
             try:
-                SpotifyDownloader.__session = builder.oauth(webbrowser.open).create()
+                succes_page = "<html><body><h1>Login Successful</h1><p>You can close this window now.</p><script>setTimeout(() => {window.close()}, 100);</script></body></html>"
+                SpotifyDownloader.__session = builder.oauth(webbrowser.open, succes_page).create()
             except Exception:
                 raise DownloadException("Failed to login to Spotify")
         
@@ -60,12 +61,12 @@ class SpotifyDownloader(Downloader):
         return SpotifyDownloader.__session.is_valid()
 
     @staticmethod
-    def download_resource(path: str, uri: str, resource_type: DownlaodResource, print_title: Callable[[Metadata], None] | None = None, progress: ProgressHandler | None = None) -> None:
+    def download_resource(path: str, uri: str, resource_type: DownlaodResource, print_title: Callable[[Metadata], None] | None = None, progress: ProgressHandler | None = None) -> bool:
         if type(resource_type) is not SpotifyResource:
             raise DownloadException("Invalid resource type for SpotifyDownloader")
         match resource_type:
             case SpotifyResource.TRACK:
-                SpotifyDownloader.download_track(path, uri, print_title, progress)
+                return SpotifyDownloader.download_track(path, uri, print_title, progress)
             case SpotifyResource.ALBUM:
                 pass
             case SpotifyResource.PLAYLIST:
@@ -142,7 +143,7 @@ class SpotifyDownloader(Downloader):
                     f.write(chunk)
                     if progress.has_task("download"):
                         progress.update_task("download", advance=len(chunk))
-        except Exception:
+        except Exception as e:
             progress.stop()
             raise DownloadException("Failed to download track audio")
         
